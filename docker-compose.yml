@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    container_name: ping-exporter
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./data:/app/data
+    # ICMP raw-сокеты для icmplib (ping_privileged=true)
+    cap_add:
+      - NET_RAW
+    # позволяет unprivileged ICMP, если запускать без NET_RAW
+    sysctls:
+      - net.ipv4.ping_group_range=0 2147483647

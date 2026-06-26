@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Админка — {{ app_title }}{% endblock %}
+
+{% macro navlink(href, key, label) %}
+<a href="{{ href }}" class="block rounded-md px-3 py-2 text-sm transition-colors {{ 'bg-ok/15 text-ok font-medium' if active == key else 'text-slate-300 hover:bg-card' }}">{{ label }}</a>
+{% endmacro %}
+
+{% block body %}
+<div class="flex min-h-dvh">
+  <aside class="hidden w-60 shrink-0 border-r border-border bg-surface p-4 md:block">
+    <div class="mb-6 flex items-center gap-2 px-1">
+      <svg class="h-6 w-6 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+      <span class="font-semibold">{{ app_title }}</span>
+    </div>
+    <nav class="space-y-1">
+      {{ navlink('/admin', 'overview', 'Обзор') }}
+      {{ navlink('/admin/devices', 'devices', 'Устройства') }}
+      {{ navlink('/admin/groups', 'groups', 'Разделы') }}
+      {{ navlink('/admin/settings', 'settings', 'Настройки') }}
+    </nav>
+    <div class="mt-6 space-y-1 border-t border-border pt-4">
+      <a href="/" class="block rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-card">Дашборд</a>
+      <a href="/logout" class="block rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-card">Выйти</a>
+    </div>
+  </aside>
+
+  <div class="min-w-0 flex-1">
+    <header class="flex items-center justify-between gap-3 border-b border-border bg-surface/80 px-4 py-3 backdrop-blur md:hidden">
+      <span class="font-semibold">{{ app_title }}</span>
+      <nav class="flex gap-2 text-sm">
+        <a href="/admin/devices" class="text-slate-300">Устройства</a>
+        <a href="/admin/groups" class="text-slate-300">Разделы</a>
+        <a href="/admin/settings" class="text-slate-300">Настройки</a>
+        <a href="/logout" class="text-slate-300">Выйти</a>
+      </nav>
+    </header>
+    <main class="mx-auto max-w-5xl px-4 py-6">
+      <h1 class="mb-6 text-xl font-semibold">{% block heading %}{% endblock %}</h1>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% endblock %}

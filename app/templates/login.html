@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Вход — {{ app_title }}{% endblock %}
+{% block body %}
+<main class="grid min-h-dvh place-items-center px-4">
+  <div class="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl">
+    <div class="mb-6 flex items-center gap-2">
+      <svg class="h-6 w-6 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+      <h1 class="text-lg font-semibold">{{ app_title }}</h1>
+    </div>
+    {% if error %}
+    <div role="alert" class="mb-4 rounded-md border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login" class="space-y-4">
+      <div>
+        <label for="username" class="mb-1 block text-sm text-slate-300">Логин</label>
+        <input id="username" name="username" autocomplete="username" required
+               class="w-full rounded-md border border-border bg-surface px-3 py-2 text-slate-100 focus:border-ok focus:outline-none focus:ring-2 focus:ring-ok/40" />
+      </div>
+      <div>
+        <label for="password" class="mb-1 block text-sm text-slate-300">Пароль</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required
+               class="w-full rounded-md border border-border bg-surface px-3 py-2 text-slate-100 focus:border-ok focus:outline-none focus:ring-2 focus:ring-ok/40" />
+      </div>
+      <button type="submit" class="w-full rounded-md bg-ok px-4 py-2 font-semibold text-slate-900 transition-colors hover:bg-ok/90">Войти</button>
+    </form>
+    <a href="/" class="mt-4 block text-center text-sm text-slate-400 hover:text-slate-200">← к дашборду</a>
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{{ app_title }} — статус{% endblock %}
+
+{% macro device_row(d) %}
+<div class="device flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2.5 border border-border/40 hover:border-border transition-colors"
+     data-device-id="{{ d.id }}" data-role="open-chart" title="Показать график latency">
+  <div class="flex items-center gap-3 min-w-0">
+    <span data-role="dot" class="h-2.5 w-2.5 shrink-0 rounded-full {{ 'bg-bad' if d.is_up is false else ('bg-slate-500' if d.is_up is none else ('bg-warn' if d.is_slow else 'bg-ok')) }}"
+          title="{{ 'офлайн' if d.is_up is false else ('нет данных' if d.is_up is none else ('медленно' if d.is_slow else 'онлайн')) }}"></span>
+    <div class="min-w-0">
+      <div class="truncate font-medium text-slate-100">{{ d.name }}{% if not d.enabled %} <span class="text-xs text-slate-500">(выкл.)</span>{% endif %}</div>
+      <div class="truncate font-mono text-xs text-slate-400">{{ d.host }}</div>
+    </div>
+  </div>
+  <div class="flex items-center gap-4 text-right text-xs">
+    <div data-role="spark" class="hidden h-6 w-20 sm:block"></div>
+    <div class="w-16 tabular-nums">
+      <div data-role="latency" class="font-mono text-slate-200">{{ ('%.0f ms'|format(d.last_latency_ms)) if d.last_latency_ms is not none else '—' }}</div>
+      <div class="text-slate-500">latency</div>
+    </div>
+    <div class="w-16 tabular-nums">
+      <div data-role="uptime" class="font-mono text-slate-200">{{ ('%.1f%%'|format(d.uptime_24h)) if d.uptime_24h is not none else '—' }}</div>
+      <div class="text-slate-500">24ч</div>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+{% block body %}
+<header class="sticky top-0 z-20 border-b border-border bg-surface/90 backdrop-blur">
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+    <div class="flex items-center gap-2">
+      <svg class="h-6 w-6 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+      <h1 class="text-lg font-semibold">{{ app_title }}</h1>
+    </div>
+    <div class="flex items-center gap-4 text-sm">
+      <span class="text-slate-400">обновлено <span id="updated">—</span></span>
+      {% if user %}
+        <a href="/admin" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">Админка</a>
+      {% else %}
+        <a href="/login" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">Вход</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<main class="mx-auto max-w-6xl px-4 py-6">
+  <!-- Сводка -->
+  <div class="mb-4 grid grid-cols-3 gap-3">
+    <div class="rounded-xl border border-border bg-card px-4 py-3">
+      <div class="text-2xl font-semibold tabular-nums" id="sum-total">{{ status.total }}</div>
+      <div class="text-xs text-slate-400">всего устройств</div>
+    </div>
+    <div class="rounded-xl border border-border bg-card px-4 py-3">
+      <div class="text-2xl font-semibold tabular-nums text-ok" id="sum-online">{{ status.online }}</div>
+      <div class="text-xs text-slate-400">онлайн</div>
+    </div>
+    <div class="rounded-xl border border-border bg-card px-4 py-3">
+      <div class="text-2xl font-semibold tabular-nums text-bad" id="sum-offline">{{ status.offline }}</div>
+      <div class="text-xs text-slate-400">офлайн</div>
+    </div>
+  </div>
+
+  <!-- Панель управления: переключатель вида + поиск/фильтр -->
+  <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="inline-flex rounded-lg border border-border bg-card p-0.5 text-sm">
+      <button data-view="cards" class="view-btn rounded-md px-3 py-1.5 font-medium transition-colors">Карточки</button>
+      <button data-view="table" class="view-btn rounded-md px-3 py-1.5 font-medium transition-colors">Таблица</button>
+    </div>
+    <div id="table-controls" class="hidden flex-col gap-2 sm:flex-row">
+      <input id="search" type="search" placeholder="поиск: имя, IP, раздел…"
+             class="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-slate-100 focus:border-ok focus:outline-none focus:ring-2 focus:ring-ok/40 sm:w-64" />
+      <select id="zone-filter"
+              class="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-slate-100 focus:border-ok focus:outline-none focus:ring-2 focus:ring-ok/40">
+        <option value="">все разделы</option>
+        {% for g in status.groups %}<option value="{{ g.name }}">{{ g.name }}</option>{% endfor %}
+        {% if status.ungrouped %}<option value="__none__">без раздела</option>{% endif %}
+      </select>
+      <button id="export-csv" type="button"
+              class="inline-flex items-center justify-center gap-1.5 rounded-md bg-card px-3 py-1.5 text-sm font-medium text-slate-100 hover:bg-border">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+        CSV
+      </button>
+    </div>
+  </div>
+
+  <!-- Легенда статусов (также гарантирует генерацию классов цветов в Tailwind CDN) -->
+  <div class="mb-4 flex flex-wrap items-center gap-4 text-xs text-slate-400">
+    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-ok"></span>онлайн</span>
+    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-warn"></span>медленно (выше порога)</span>
+    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-bad"></span>офлайн</span>
+    <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-slate-500"></span>нет данных</span>
+  </div>
+
+  {% if status.total == 0 %}
+  <div class="rounded-xl border border-dashed border-border bg-card/40 px-6 py-12 text-center text-slate-400">
+    Пока нет устройств. {% if user %}<a class="text-ok underline" href="/admin/devices">Добавьте устройства</a> (есть массовый импорт списком).{% else %}Войдите в админку, чтобы добавить устройства.{% endif %}
+  </div>
+  {% endif %}
+
+  <!-- ВИД: карточки по разделам -->
+  <div id="card-view" class="space-y-6">
+    {% for g in status.groups %}
+    <section class="rounded-xl border border-border bg-card/40">
+      <div class="flex items-center justify-between border-b border-border px-4 py-3">
+        <div>
+          <h2 class="font-semibold text-slate-100">{{ g.name }}</h2>
+          {% if g.description %}<p class="text-xs text-slate-400">{{ g.description }}</p>{% endif %}
+        </div>
+        <div class="flex items-center gap-3 text-xs">
+          <span class="rounded-full bg-ok/10 px-2 py-0.5 font-mono text-ok">{{ g.online }} онлайн</span>
+          <span class="rounded-full bg-bad/10 px-2 py-0.5 font-mono text-bad">{{ g.offline }} офлайн</span>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 gap-2 p-3 md:grid-cols-2">
+        {% for d in g.devices %}{{ device_row(d) }}{% endfor %}
+        {% if not g.devices %}<div class="col-span-full px-2 py-4 text-center text-sm text-slate-500">Нет устройств в разделе</div>{% endif %}
+      </div>
+    </section>
+    {% endfor %}
+
+    {% if status.ungrouped %}
+    <section class="rounded-xl border border-border bg-card/40">
+      <div class="border-b border-border px-4 py-3"><h2 class="font-semibold text-slate-100">Без раздела</h2></div>
+      <div class="grid grid-cols-1 gap-2 p-3 md:grid-cols-2">
+        {% for d in status.ungrouped %}{{ device_row(d) }}{% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
+
+  <!-- ВИД: таблица (рендерится из JS, удобно для 100+ устройств) -->
+  <div id="table-view" class="hidden overflow-x-auto rounded-xl border border-border">
+    <table class="w-full text-sm">
+      <thead class="sticky top-0 bg-surface text-left text-xs uppercase text-slate-400">
+        <tr>
+          <th data-sort="status" class="cursor-pointer select-none px-3 py-2">●</th>
+          <th data-sort="name" class="cursor-pointer select-none px-3 py-2">Название</th>
+          <th data-sort="host" class="cursor-pointer select-none px-3 py-2">Host</th>
+          <th data-sort="group" class="cursor-pointer select-none px-3 py-2">Раздел</th>
+          <th data-sort="latency" class="cursor-pointer select-none px-3 py-2 text-right">Latency</th>
+          <th class="px-3 py-2">История</th>
+          <th data-sort="uptime" class="cursor-pointer select-none px-3 py-2 text-right">Uptime 24ч</th>
+        </tr>
+      </thead>
+      <tbody id="table-body" class="divide-y divide-border"></tbody>
+    </table>
+    <div id="table-empty" class="hidden px-3 py-8 text-center text-sm text-slate-500">Ничего не найдено</div>
+  </div>
+</main>
+
+<!-- Модальное окно с графиком latency -->
+<div id="chart-modal" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+  <div class="w-full max-w-2xl rounded-2xl border border-border bg-card p-5 shadow-2xl">
+    <div class="mb-4 flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h3 id="chart-title" class="truncate font-semibold text-slate-100">—</h3>
+        <p id="chart-sub" class="truncate font-mono text-xs text-slate-400">—</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="chart-range" class="rounded-md border border-border bg-surface px-2 py-1 text-sm text-slate-100 focus:border-ok focus:outline-none">
+          <option value="1">1 ч</option>
+          <option value="6">6 ч</option>
+          <option value="24" selected>24 ч</option>
+          <option value="168">7 дней</option>
+        </select>
+        <button id="chart-close" class="rounded-md bg-surface px-2.5 py-1 text-slate-300 hover:bg-border" aria-label="Закрыть">✕</button>
+      </div>
+    </div>
+    <div class="relative h-72"><canvas id="lat-chart"></canvas></div>
+    <p id="chart-empty" class="hidden py-10 text-center text-sm text-slate-500">Нет данных за выбранный период</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+{% endblock %}

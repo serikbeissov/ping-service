@@ -1,0 +1,40 @@
+{% extends "admin/base.html" %}
+{% block heading %}Обзор{% endblock %}
+{% block content %}
+<div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+  <div class="rounded-xl border border-border bg-card px-4 py-3">
+    <div class="text-2xl font-semibold tabular-nums">{{ status.total }}</div>
+    <div class="text-xs text-slate-400">всего устройств</div>
+  </div>
+  <div class="rounded-xl border border-border bg-card px-4 py-3">
+    <div class="text-2xl font-semibold tabular-nums text-ok">{{ status.online }}</div>
+    <div class="text-xs text-slate-400">онлайн</div>
+  </div>
+  <div class="rounded-xl border border-border bg-card px-4 py-3">
+    <div class="text-2xl font-semibold tabular-nums text-bad">{{ status.offline }}</div>
+    <div class="text-xs text-slate-400">офлайн</div>
+  </div>
+</div>
+
+<div class="flex flex-wrap gap-3">
+  <a href="/admin/devices" class="rounded-md bg-ok px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-ok/90">+ Устройство</a>
+  <a href="/admin/groups" class="rounded-md bg-card px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">+ Раздел</a>
+  <a href="/" class="rounded-md bg-card px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">Открыть дашборд</a>
+</div>
+
+<div class="mt-6 space-y-4">
+  {% for g in status.groups %}
+  <div class="rounded-xl border border-border bg-card/40 p-4">
+    <div class="mb-2 flex items-center justify-between">
+      <span class="font-medium">{{ g.name }}</span>
+      <span class="text-xs text-slate-400">{{ g.online }}/{{ g.total }} онлайн</span>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+      {% for d in g.devices %}
+      <span class="h-2.5 w-2.5 rounded-full {{ 'bg-ok' if d.is_up else ('bg-bad' if d.is_up is false else 'bg-slate-500') }}" title="{{ d.name }}"></span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

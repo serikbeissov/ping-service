@@ -1,0 +1,77 @@
+{% extends "admin/base.html" %}
+{% block heading %}Настройки{% endblock %}
+{% set input_cls = "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-slate-100 focus:border-ok focus:outline-none focus:ring-2 focus:ring-ok/40" %}
+{% block content %}
+
+{% if msg %}
+<div role="status" class="mb-4 rounded-md border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
+  {% if msg == 'saved' %}Настройки сохранены.{% elif msg == 'tg_ok' %}Тестовое уведомление отправлено в Telegram.{% elif msg == 'pw' %}Пароль обновлён.{% else %}{{ msg }}{% endif %}
+</div>
+{% endif %}
+{% if err %}
+<div role="alert" class="mb-4 rounded-md border border-bad/40 bg-bad/10 px-3 py-2 text-sm text-bad">Ошибка: {{ err }}</div>
+{% endif %}
+
+<form method="post" action="/admin/settings" class="mb-6 rounded-xl border border-border bg-card p-4">
+  <h2 class="mb-4 text-sm font-semibold text-slate-300">Мониторинг и уведомления</h2>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Интервал по умолчанию (сек)</label>
+      <input name="default_interval" type="number" min="5" value="{{ s.default_interval }}" class="{{ input_cls }}" />
+    </div>
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Порог анти-флаппинга (неудач подряд)</label>
+      <input name="fail_threshold" type="number" min="1" value="{{ s.fail_threshold }}" class="{{ input_cls }}" />
+    </div>
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Хранить историю (дней)</label>
+      <input name="history_retention_days" type="number" min="1" value="{{ s.history_retention_days }}" class="{{ input_cls }}" />
+    </div>
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Порог latency (мс), 0 = выкл.</label>
+      <input name="latency_threshold_ms" type="number" min="0" value="{{ s.latency_threshold_ms }}" class="{{ input_cls }}" />
+      <p class="mt-1 text-xs text-slate-500">Глобальный порог; можно переопределить у устройства. Алерт 🟡 при превышении.</p>
+    </div>
+  </div>
+
+  <div class="mt-4 flex items-center gap-2">
+    <input id="alerts_enabled" type="checkbox" name="alerts_enabled" {{ 'checked' if s.alerts_enabled else '' }} class="accent-ok" />
+    <label for="alerts_enabled" class="text-sm text-slate-300">Включить уведомления в Telegram</label>
+  </div>
+
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Telegram Bot Token</label>
+      <input name="telegram_bot_token" value="{{ s.telegram_bot_token }}" placeholder="123456:ABC-..." class="{{ input_cls }} font-mono" />
+      <p class="mt-1 text-xs text-slate-500">Получите у @BotFather.</p>
+    </div>
+    <div>
+      <label class="mb-1 block text-xs text-slate-400">Telegram Chat ID</label>
+      <input name="telegram_chat_id" value="{{ s.telegram_chat_id }}" placeholder="-1001234567890" class="{{ input_cls }} font-mono" />
+      <p class="mt-1 text-xs text-slate-500">ID чата/канала. Узнать можно через @userinfobot.</p>
+    </div>
+  </div>
+
+  <div class="mt-5 flex gap-3">
+    <button class="rounded-md bg-ok px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-ok/90">Сохранить</button>
+  </div>
+</form>
+
+<form method="post" action="/admin/settings/test-telegram" class="mb-6 rounded-xl border border-border bg-card p-4">
+  <h2 class="mb-2 text-sm font-semibold text-slate-300">Проверка Telegram</h2>
+  <p class="mb-3 text-xs text-slate-500">Отправит тестовое сообщение с текущими token / chat id (сохраните их сначала).</p>
+  <button class="rounded-md bg-card border border-border px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">Отправить тест</button>
+</form>
+
+<form method="post" action="/admin/settings/password" class="rounded-xl border border-border bg-card p-4"
+      onsubmit="return confirm('Сменить пароль администратора?');">
+  <h2 class="mb-3 text-sm font-semibold text-slate-300">Смена пароля ({{ user.username }})</h2>
+  <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+    <div class="sm:w-72">
+      <label class="mb-1 block text-xs text-slate-400">Новый пароль</label>
+      <input name="new_password" type="password" required minlength="4" autocomplete="new-password" class="{{ input_cls }}" />
+    </div>
+    <button class="rounded-md bg-card border border-border px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">Сменить пароль</button>
+  </div>
+</form>
+{% endblock %}
