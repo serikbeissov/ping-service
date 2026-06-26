@@ -4,14 +4,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import crud
+from ..auth import require_user
 from ..database import get_db
+from ..models import User
 from ..status_service import build_status
 
 router = APIRouter(prefix="/api")
 
 
 @router.get("/status")
-def status(db: Session = Depends(get_db)):
+def status(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
     data = build_status(db)
     data["generated_at"] = datetime.now(timezone.utc).isoformat()
     return data
@@ -22,6 +27,7 @@ def device_history(
     device_id: int,
     hours: int = 24,
     db: Session = Depends(get_db),
+    user: User = Depends(require_user),
 ):
     device = crud.get_device(db, device_id)
     if device is None:

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ app_title }} — NOC</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ['"Fira Sans"','system-ui','sans-serif'] },
+      colors: { bg:'#020617', surface:'#0F172A', card:'#1E293B', border:'#334155', ok:'#22C55E', bad:'#EF4444', warn:'#F59E0B' },
+    } } };
+  </script>
+  <style>body{background:#020617;color:#F8FAFC}</style>
+</head>
+<body class="font-sans min-h-dvh">
+  <!-- гарантируем генерацию классов для динамических плиток -->
+  <div class="hidden bg-ok bg-warn bg-bad bg-slate-600 text-ok text-warn text-bad"></div>
+
+  <header class="flex items-center justify-between border-b border-border px-6 py-3">
+    <div class="flex items-center gap-3">
+      <svg class="h-7 w-7 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+      <h1 class="text-2xl font-bold">{{ app_title }}</h1>
+    </div>
+    <div class="flex items-center gap-6">
+      <div class="flex items-center gap-4 text-xl font-semibold tabular-nums">
+        <span class="text-ok"><span id="s-online">0</span> онлайн</span>
+        <span class="text-warn"><span id="s-slow">0</span> медл.</span>
+        <span class="text-bad"><span id="s-offline">0</span> офлайн</span>
+      </div>
+      <span id="clock" class="font-mono text-2xl font-bold tabular-nums">--:--:--</span>
+      <button id="fs" class="rounded-md bg-card px-3 py-2 text-sm text-slate-200 hover:bg-border">⛶ Во весь экран</button>
+    </div>
+  </header>
+
+  <main id="noc" class="space-y-6 p-6"></main>
+
+  <script>
+  (function () {
+    const REFRESH_MS = 5000;
+    const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    function tileColor(d){
+      if (d.is_up === false) return 'bg-bad text-slate-900';
+      if (d.is_up == null) return 'bg-slate-600 text-slate-100';
+      return d.is_slow ? 'bg-warn text-slate-900' : 'bg-ok text-slate-900';
+    }
+    function tile(d){
+      const lat = d.last_latency_ms==null ? '' : Math.round(d.last_latency_ms)+' ms';
+      return '<div class="rounded-lg px-3 py-2 '+tileColor(d)+'">'+
+        '<div class="truncate text-sm font-bold leading-tight">'+esc(d.name)+'</div>'+
+        '<div class="flex items-center justify-between text-[11px] font-medium opacity-80">'+
+        '<span class="truncate">'+esc(d.host)+'</span><span class="ml-2 tabular-nums">'+lat+'</span></div></div>';
+    }
+    function zoneBlock(g){
+      const tiles = g.devices.map(tile).join('');
+      return '<section class="rounded-xl border border-border bg-card/30 p-4">'+
+        '<div class="mb-3 flex items-center justify-between">'+
+        '<h2 class="text-lg font-semibold">'+esc(g.name)+'</h2>'+
+        '<span class="text-sm text-slate-400"><span class="text-ok font-semibold">'+g.online+'</span> / '+g.total+' онлайн'+
+        (g.offline?' · <span class="text-bad font-semibold">'+g.offline+'</span> офлайн':'')+'</span></div>'+
+        '<div class="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8">'+tiles+'</div></section>';
+    }
+    async function refresh(){
+      try {
+        const r = await fetch('/api/status',{cache:'no-store'});
+        if(!r.ok) return;
+        const d = await r.json();
+        const slow = [].concat(...d.groups.map(g=>g.devices), d.ungrouped||[]).filter(x=>x.is_up===true && x.is_slow).length;
+        document.getElementById('s-online').textContent = d.online;
+        document.getElementById('s-slow').textContent = slow;
+        document.getElementById('s-offline').textContent = d.offline;
+        let html = d.groups.map(zoneBlock).join('');
+        if ((d.ungrouped||[]).length) html += zoneBlock({name:'Без раздела', devices:d.ungrouped, online:d.ungrouped.filter(x=>x.is_up===true).length, offline:d.ungrouped.filter(x=>x.is_up===false).length, total:d.ungrouped.length});
+        document.getElementById('noc').innerHTML = html || '<div class="py-20 text-center text-slate-500">Нет устройств</div>';
+      } catch(e){}
+    }
+    function tick(){ const n=new Date(); const p=x=>String(x).padStart(2,'0'); document.getElementById('clock').textContent = p(n.getHours())+':'+p(n.getMinutes())+':'+p(n.getSeconds()); }
+    document.getElementById('fs').addEventListener('click', ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); });
+    tick(); setInterval(tick, 1000);
+    refresh(); setInterval(refresh, REFRESH_MS);
+  })();
+  </script>
+</body>
+</html>

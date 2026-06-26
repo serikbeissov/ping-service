@@ -1,0 +1,79 @@
+{% extends "admin/base.html" %}
+{% block heading %}Инциденты и SLA{% endblock %}
+{% block content %}
+
+{% macro pill(label, value, active) %}
+<a href="/admin/incidents?period={{ value }}"
+   class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors {{ 'bg-ok text-slate-900' if active else 'bg-card text-slate-200 hover:bg-border' }}">{{ label }}</a>
+{% endmacro %}
+
+<div class="mb-5 flex items-center gap-2">
+  <span class="text-sm text-slate-400">Период:</span>
+  {{ pill('24 часа', '24h', period == '24h') }}
+  {{ pill('7 дней', '7d', period == '7d') }}
+  {{ pill('30 дней', '30d', period == '30d') }}
+</div>
+
+<!-- SLA по разделам -->
+<h2 class="mb-3 text-sm font-semibold text-slate-300">Доступность (SLA) по разделам</h2>
+<div class="space-y-4">
+  {% for z in report %}
+  <div class="overflow-hidden rounded-xl border border-border bg-card/40">
+    <div class="flex items-center justify-between border-b border-border px-4 py-2.5">
+      <span class="font-medium text-slate-100">{{ z.name }}</span>
+      <span class="text-xs text-slate-400">средняя доступность
+        <span class="font-mono {{ 'text-ok' if z.avg >= 99.9 else ('text-warn' if z.avg >= 95 else 'text-bad') }}">{{ '%.3f'|format(z.avg) }}%</span>
+        · простой {{ z.downtime }}</span>
+    </div>
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-border">
+        {% for r in z.rows %}
+        <tr class="bg-card/20">
+          <td class="px-4 py-2 text-slate-100">{{ r.name }}</td>
+          <td class="px-4 py-2 font-mono text-xs text-slate-400">{{ r.host }}</td>
+          <td class="px-4 py-2 text-right font-mono tabular-nums {{ 'text-ok' if r.availability >= 99.9 else ('text-warn' if r.availability >= 95 else 'text-bad') }}">{{ '%.3f'|format(r.availability) }}%</td>
+          <td class="px-4 py-2 text-right text-xs text-slate-400">простой {{ r.downtime }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="rounded-xl border border-dashed border-border px-6 py-10 text-center text-slate-500">Нет устройств.</div>
+  {% endfor %}
+</div>
+
+<!-- Журнал инцидентов -->
+<h2 class="mb-3 mt-8 text-sm font-semibold text-slate-300">Журнал инцидентов <span class="text-xs font-normal text-slate-500">(время UTC)</span></h2>
+<div class="overflow-x-auto rounded-xl border border-border">
+  <table class="w-full text-sm">
+    <thead class="bg-surface text-left text-xs uppercase text-slate-400">
+      <tr>
+        <th class="px-3 py-2">Тип</th>
+        <th class="px-3 py-2">Устройство</th>
+        <th class="px-3 py-2">Начало</th>
+        <th class="px-3 py-2">Конец</th>
+        <th class="px-3 py-2 text-right">Длительность</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for i in incidents %}
+      <tr class="bg-card/30">
+        <td class="px-3 py-2">
+          {% if i.kind == 'down' %}<span class="rounded-full bg-bad/15 px-2 py-0.5 text-xs font-medium text-bad">офлайн</span>
+          {% else %}<span class="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">медленно</span>{% endif %}
+        </td>
+        <td class="px-3 py-2 text-slate-100">{{ i.name }} <span class="font-mono text-xs text-slate-500">{{ i.host }}</span></td>
+        <td class="px-3 py-2 font-mono text-xs text-slate-300">{{ i.started_at.strftime('%d.%m %H:%M:%S') }}</td>
+        <td class="px-3 py-2 font-mono text-xs text-slate-300">
+          {% if i.ongoing %}<span class="text-bad">продолжается</span>{% else %}{{ i.ended_at.strftime('%d.%m %H:%M:%S') }}{% endif %}
+        </td>
+        <td class="px-3 py-2 text-right font-mono tabular-nums text-slate-200">{{ i.duration }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="px-3 py-10 text-center text-slate-500">Инцидентов за период нет 🎉</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

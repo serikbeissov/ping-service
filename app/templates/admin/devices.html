@@ -20,33 +20,46 @@
 <form method="post" action="/admin/devices" class="mb-6 rounded-xl border border-border bg-card p-4">
   <h2 class="mb-3 text-sm font-semibold text-slate-300">Новое устройство</h2>
   <div class="grid grid-cols-1 gap-3 sm:grid-cols-12">
-    <div class="sm:col-span-3">
+    <div class="sm:col-span-4">
       <label class="mb-1 block text-xs text-slate-400">Название *</label>
       <input name="name" required placeholder="Камера вход" class="{{ input_cls }}" />
     </div>
-    <div class="sm:col-span-3">
-      <label class="mb-1 block text-xs text-slate-400">Host (IP / DNS) *</label>
+    <div class="sm:col-span-4">
+      <label class="mb-1 block text-xs text-slate-400">Host (IP / DNS / URL) *</label>
       <input name="host" required placeholder="192.168.1.10" class="{{ input_cls }} font-mono" />
     </div>
     <div class="sm:col-span-2">
+      <label class="mb-1 block text-xs text-slate-400">Тип проверки</label>
+      <select name="check_type" class="{{ input_cls }}">
+        <option value="icmp">ICMP (ping)</option>
+        <option value="tcp">TCP-порт</option>
+        <option value="http">HTTP(S)</option>
+      </select>
+    </div>
+    <div class="sm:col-span-2">
+      <label class="mb-1 block text-xs text-slate-400" title="Порт для TCP; для HTTP опционально">Порт</label>
+      <input name="port" type="number" placeholder="554 / 80…" class="{{ input_cls }}" />
+    </div>
+    <div class="sm:col-span-4">
       <label class="mb-1 block text-xs text-slate-400">Раздел</label>
       <select name="group_id" class="{{ input_cls }}">{{ group_options(groups, none) }}</select>
     </div>
-    <div class="sm:col-span-1">
-      <label class="mb-1 block text-xs text-slate-400">Интервал</label>
+    <div class="sm:col-span-2">
+      <label class="mb-1 block text-xs text-slate-400">Интервал, сек</label>
       <input name="interval" type="number" placeholder="по умолч." class="{{ input_cls }}" />
     </div>
-    <div class="sm:col-span-1">
+    <div class="sm:col-span-2">
       <label class="mb-1 block text-xs text-slate-400" title="Порог latency, мс">Порог ms</label>
       <input name="latency_threshold" type="number" placeholder="глоб." class="{{ input_cls }}" />
     </div>
-    <div class="flex items-center gap-2 sm:col-span-1">
-      <label class="flex items-center gap-1.5 text-xs text-slate-400"><input type="checkbox" name="enabled" checked class="accent-ok" /> вкл.</label>
+    <div class="flex items-center gap-2 sm:col-span-2">
+      <label class="flex items-center gap-1.5 text-xs text-slate-400"><input type="checkbox" name="enabled" checked class="accent-ok" /> включено</label>
     </div>
-    <div class="flex items-end sm:col-span-1">
+    <div class="flex items-end sm:col-span-2">
       <button class="w-full rounded-md bg-ok px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-ok/90">Добавить</button>
     </div>
   </div>
+  <p class="mt-2 text-xs text-slate-500">TCP — проверка открытия порта (напр. RTSP 554, веб 80/443). HTTP — запрос и проверка кода ответа (2xx/3xx = онлайн); в Host можно указать полный URL.</p>
 </form>
 
 <details class="mb-6 rounded-xl border border-border bg-card">
@@ -91,6 +104,7 @@
         <th class="px-3 py-2">Статус</th>
         <th class="px-3 py-2">Название</th>
         <th class="px-3 py-2">Host</th>
+        <th class="px-3 py-2">Тип</th>
         <th class="px-3 py-2">Раздел</th>
         <th class="px-3 py-2">Интервал</th>
         <th class="px-3 py-2">Порог ms</th>
@@ -105,6 +119,11 @@
         </td>
         <td class="px-3 py-2 font-medium text-slate-100">{{ d.name }}{% if not d.enabled %} <span class="text-xs text-slate-500">(выкл.)</span>{% endif %}</td>
         <td class="px-3 py-2 font-mono text-slate-300">{{ d.host }}</td>
+        <td class="px-3 py-2 text-xs text-slate-400">
+          {%- if d.check_type == 'tcp' -%}TCP{{ ':' ~ d.port if d.port }}
+          {%- elif d.check_type == 'http' -%}HTTP
+          {%- else -%}ICMP{%- endif -%}
+        </td>
         <td class="px-3 py-2 text-slate-300">{{ d.group.name if d.group else '—' }}</td>
         <td class="px-3 py-2 tabular-nums text-slate-400">{{ d.interval if d.interval else 'по умолч.' }}</td>
         <td class="px-3 py-2 tabular-nums text-slate-400">{{ d.latency_threshold if d.latency_threshold else 'глоб.' }}</td>
@@ -115,6 +134,14 @@
               <form method="post" action="/admin/devices/{{ d.id }}/edit" class="space-y-2">
                 <input name="name" value="{{ d.name }}" required class="{{ input_cls }}" />
                 <input name="host" value="{{ d.host }}" required class="{{ input_cls }} font-mono" />
+                <div class="flex gap-2">
+                  <select name="check_type" class="{{ input_cls }}">
+                    <option value="icmp" {{ 'selected' if d.check_type == 'icmp' or not d.check_type else '' }}>ICMP</option>
+                    <option value="tcp" {{ 'selected' if d.check_type == 'tcp' else '' }}>TCP</option>
+                    <option value="http" {{ 'selected' if d.check_type == 'http' else '' }}>HTTP</option>
+                  </select>
+                  <input name="port" type="number" value="{{ d.port or '' }}" placeholder="порт" class="{{ input_cls }}" />
+                </div>
                 <select name="group_id" class="{{ input_cls }}">{{ group_options(groups, d.group_id) }}</select>
                 <input name="interval" type="number" value="{{ d.interval or '' }}" placeholder="интервал, сек (по умолч.)" class="{{ input_cls }}" />
                 <input name="latency_threshold" type="number" value="{{ d.latency_threshold or '' }}" placeholder="порог latency, мс (глоб.)" class="{{ input_cls }}" />
@@ -130,7 +157,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="7" class="px-3 py-10 text-center text-slate-500">Устройств пока нет.</td></tr>
+      <tr><td colspan="8" class="px-3 py-10 text-center text-slate-500">Устройств пока нет.</td></tr>
       {% endfor %}
     </tbody>
   </table>

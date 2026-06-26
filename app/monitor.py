@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import time
 
+import httpx
 from icmplib import async_ping
 
 from . import crud, notifier
@@ -16,8 +18,7 @@ TICK = 5
 CLEANUP_EVERY = 3600  # раз в час чистим старую историю
 
 
-async def _ping_device(device: Device, privileged: bool) -> tuple[bool, float | None]:
-    """Пингует один host, возвращает (alive, latency_ms)."""
+async def _check_icmp(device: Device, privileged: bool) -> tuple[bool, float | None]:
     try:
         host = await async_ping(
             device.host, count=2, interval=0.2, timeout=2, privileged=privileged
@@ -27,6 +28,62 @@ async def _ping_device(device: Device, privileged: bool) -> tuple[bool, float | 
     except Exception as exc:  # резолв/сетевые ошибки → считаем недоступным
         log.debug("ping %s failed: %s", device.host, exc)
         return False, None
+
+
+async def _check_tcp(device: Device, timeout: float = 3.0) -> tuple[bool, float | None]:
+    port = device.port or 80
+    start = time.perf_counter()
+    writer = None
+    try:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(device.host, port), timeout=timeout
+        )
+        return True, round((time.perf_counter() - start) * 1000, 2)
+    except Exception as exc:
+        log.debug("tcp %s:%s failed: %s", device.host, port, exc)
+        return False, None
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+
+def _http_url(device: Device) -> str:
+    h = device.host
+    if h.startswith("http://") or h.startswith("https://"):
+        return h
+    scheme = "https" if device.port in (443, 8443) else "http"
+    if device.port and device.port not in (80, 443):
+        return f"{scheme}://{h}:{device.port}"
+    return f"{scheme}://{h}"
+
+
+async def _check_http(device: Device, timeout: float = 5.0) -> tuple[bool, float | None]:
+    url = _http_url(device)
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(
+            timeout=timeout, verify=False, follow_redirects=True
+        ) as client:
+            resp = await client.get(url)
+        elapsed = round((time.perf_counter() - start) * 1000, 2)
+        return (200 <= resp.status_code < 400), elapsed
+    except Exception as exc:
+        log.debug("http %s failed: %s", url, exc)
+        return False, None
+
+
+async def _check_device(device: Device, privileged: bool) -> tuple[bool, float | None]:
+    """Проверка устройства согласно его типу. Возвращает (alive, latency_ms)."""
+    t = device.check_type or "icmp"
+    if t == "tcp":
+        return await _check_tcp(device)
+    if t == "http":
+        return await _check_http(device)
+    return await _check_icmp(device, privileged)
 
 
 def _due(device: Device, default_interval: int) -> bool:
@@ -49,7 +106,7 @@ async def _run_checks() -> None:
             return
 
         results = await asyncio.gather(
-            *(_ping_device(d, settings.ping_privileged) for d in devices)
+            *(_check_device(d, settings.ping_privileged) for d in devices)
         )
 
         notifications: list[str] = []
@@ -80,6 +137,11 @@ async def _run_checks() -> None:
             if state_changed:
                 device.is_up = new_state
                 device.last_change = now
+                # журнал инцидентов: открываем/закрываем «down»
+                if new_state is False:
+                    crud.open_incident(db, device.id, "down")
+                elif new_state is True:
+                    crud.close_incident(db, device.id, "down", now)
                 if prev is not None and app_settings.alerts_enabled:
                     if new_state:
                         notifications.append(
@@ -117,6 +179,13 @@ async def _run_checks() -> None:
             else:
                 new_slow = prev_slow
             device.is_slow = new_slow
+
+            # журнал инцидентов: «slow»
+            if new_slow != prev_slow:
+                if new_slow:
+                    crud.open_incident(db, device.id, "slow")
+                else:
+                    crud.close_incident(db, device.id, "slow", now)
 
             # алерт о замедлении/нормализации — только в установившемся up-состоянии,
             # чтобы не дублировать сообщения о падении/восстановлении

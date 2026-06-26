@@ -1,13 +1,28 @@
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import crud, notifier
-from ..auth import hash_password, require_admin
+from ..auth import hash_password, require_admin, require_user
 from ..database import get_db
-from ..models import User
+from ..models import User, utcnow
 from ..status_service import build_status
 from ..templating import templates
+
+PERIODS = {"24h": 24, "7d": 168, "30d": 720}
+
+
+def _fmt_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}с"
+    if seconds < 3600:
+        return f"{seconds // 60}м {seconds % 60}с"
+    if seconds < 86400:
+        return f"{seconds // 3600}ч {(seconds % 3600) // 60}м"
+    return f"{seconds // 86400}д {(seconds % 86400) // 3600}ч"
 
 router = APIRouter(prefix="/admin")
 
@@ -16,7 +31,7 @@ router = APIRouter(prefix="/admin")
 def admin_home(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_user),
 ):
     status = build_status(db)
     return templates.TemplateResponse(
@@ -145,6 +160,10 @@ def _parse_interval(interval: str | None) -> int | None:
     return int(interval)
 
 
+def _norm_check_type(value: str | None) -> str:
+    return value if value in ("icmp", "tcp", "http") else "icmp"
+
+
 @router.post("/devices")
 def create_device(
     name: str = Form(...),
@@ -152,6 +171,8 @@ def create_device(
     group_id: str = Form(None),
     interval: str = Form(None),
     latency_threshold: str = Form(None),
+    check_type: str = Form("icmp"),
+    port: str = Form(None),
     enabled: str = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
@@ -163,6 +184,8 @@ def create_device(
         group_id=_parse_group_id(group_id),
         interval=_parse_interval(interval),
         latency_threshold=_parse_interval(latency_threshold),
+        check_type=_norm_check_type(check_type),
+        port=_parse_interval(port),
         enabled=enabled is not None,
     )
     return RedirectResponse(url="/admin/devices", status_code=303)
@@ -176,6 +199,8 @@ def edit_device(
     group_id: str = Form(None),
     interval: str = Form(None),
     latency_threshold: str = Form(None),
+    check_type: str = Form("icmp"),
+    port: str = Form(None),
     enabled: str = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
@@ -190,6 +215,8 @@ def edit_device(
             group_id=_parse_group_id(group_id),
             interval=_parse_interval(interval),
             latency_threshold=_parse_interval(latency_threshold),
+            check_type=_norm_check_type(check_type),
+            port=_parse_interval(port),
             enabled=enabled is not None,
         )
     return RedirectResponse(url="/admin/devices", status_code=303)
@@ -205,6 +232,196 @@ def delete_device(
     if device:
         crud.delete_device(db, device)
     return RedirectResponse(url="/admin/devices", status_code=303)
+
+
+# ---------- Инциденты и SLA ----------
+
+@router.get("/incidents", response_class=HTMLResponse)
+def incidents_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+    period: str = "7d",
+):
+    hours = PERIODS.get(period, 168)
+    until = utcnow()
+    since = until - timedelta(hours=hours)
+    period_seconds = (until - since).total_seconds()
+
+    devices = crud.list_devices(db)
+    groups = crud.list_groups(db)
+    dev_by_id = {d.id: d for d in devices}
+    downtime = crud.downtime_seconds(db, since, until, kind="down")
+
+    def avail(seconds: float) -> float:
+        return round(max(0.0, 100.0 * (period_seconds - seconds) / period_seconds), 3)
+
+    # SLA по разделам
+    def device_row(d):
+        dt = downtime.get(d.id, 0.0)
+        return {
+            "name": d.name,
+            "host": d.host,
+            "availability": avail(dt),
+            "downtime": _fmt_duration(dt),
+            "down_seconds": dt,
+        }
+
+    report = []
+    grouped_ids = set()
+    for g in groups:
+        rows = [device_row(d) for d in g.devices]
+        grouped_ids.update(d.id for d in g.devices)
+        if rows:
+            total_dt = sum(r["down_seconds"] for r in rows)
+            report.append(
+                {
+                    "name": g.name,
+                    "rows": rows,
+                    "avg": round(sum(r["availability"] for r in rows) / len(rows), 3),
+                    "downtime": _fmt_duration(total_dt),
+                }
+            )
+    ungrouped = [device_row(d) for d in devices if d.id not in grouped_ids]
+    if ungrouped:
+        total_dt = sum(r["down_seconds"] for r in ungrouped)
+        report.append(
+            {
+                "name": "Без раздела",
+                "rows": ungrouped,
+                "avg": round(sum(r["availability"] for r in ungrouped) / len(ungrouped), 3),
+                "downtime": _fmt_duration(total_dt),
+            }
+        )
+
+    # журнал инцидентов
+    incidents = []
+    for inc in crud.list_incidents(db, since=since, limit=300):
+        d = dev_by_id.get(inc.device_id)
+        end = inc.ended_at or until
+        incidents.append(
+            {
+                "name": d.name if d else f"#{inc.device_id}",
+                "host": d.host if d else "",
+                "kind": inc.kind,
+                "started_at": inc.started_at,
+                "ended_at": inc.ended_at,
+                "ongoing": inc.ended_at is None,
+                "duration": _fmt_duration((end - inc.started_at).total_seconds()),
+            }
+        )
+
+    return templates.TemplateResponse(
+        "admin/incidents.html",
+        {
+            "request": request,
+            "user": user,
+            "active": "incidents",
+            "period": period if period in PERIODS else "7d",
+            "report": report,
+            "incidents": incidents,
+        },
+    )
+
+
+# ---------- Пользователи (только admin) ----------
+
+def _norm_role(value: str | None) -> str:
+    return "viewer" if value == "viewer" else "admin"
+
+
+@router.get("/users", response_class=HTMLResponse)
+def users_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+    msg: str | None = None,
+    err: str | None = None,
+):
+    users = crud.list_users(db)
+    return templates.TemplateResponse(
+        "admin/users.html",
+        {
+            "request": request,
+            "users": users,
+            "user": user,
+            "active": "users",
+            "msg": msg,
+            "err": err,
+        },
+    )
+
+
+@router.post("/users")
+def create_user(
+    username: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("viewer"),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    username = username.strip()
+    if not username or len(password) < 4:
+        return RedirectResponse(url="/admin/users?err=Заполните+поля", status_code=303)
+    if crud.get_user(db, username):
+        return RedirectResponse(
+            url="/admin/users?err=Пользователь+уже+существует", status_code=303
+        )
+    crud.create_user(db, username, hash_password(password), _norm_role(role))
+    return RedirectResponse(url="/admin/users?msg=created", status_code=303)
+
+
+@router.post("/users/{user_id}/edit")
+def edit_user(
+    user_id: int,
+    role: str = Form(None),
+    new_password: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        return RedirectResponse(url="/admin/users?err=Не+найден", status_code=303)
+    # нельзя снять последнего администратора
+    new_role = _norm_role(role)
+    if (
+        target.role == "admin"
+        and new_role != "admin"
+        and crud.count_admins(db) <= 1
+    ):
+        return RedirectResponse(
+            url="/admin/users?err=Нужен+хотя+бы+один+администратор", status_code=303
+        )
+    fields = {"role": new_role}
+    if new_password:
+        if len(new_password) < 4:
+            return RedirectResponse(
+                url="/admin/users?err=Пароль+слишком+короткий", status_code=303
+            )
+        fields["password_hash"] = hash_password(new_password)
+    crud.update_user(db, target, **fields)
+    return RedirectResponse(url="/admin/users?msg=updated", status_code=303)
+
+
+@router.post("/users/{user_id}/delete")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        return RedirectResponse(url="/admin/users?err=Не+найден", status_code=303)
+    if target.id == user.id:
+        return RedirectResponse(
+            url="/admin/users?err=Нельзя+удалить+себя", status_code=303
+        )
+    if target.role == "admin" and crud.count_admins(db) <= 1:
+        return RedirectResponse(
+            url="/admin/users?err=Нужен+хотя+бы+один+администратор", status_code=303
+        )
+    crud.delete_user(db, target)
+    return RedirectResponse(url="/admin/users?msg=deleted", status_code=303)
 
 
 # ---------- Настройки ----------

@@ -51,6 +51,10 @@ class Device(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # порог latency (мс) для этого устройства; None -> берётся глобальный
     latency_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # тип проверки: icmp | tcp | http
+    check_type: Mapped[str] = mapped_column(String(8), default="icmp")
+    # порт для tcp; для http — опционально (иначе 80/443 по схеме)
+    port: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # текущее состояние
     is_up: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
@@ -80,12 +84,28 @@ class CheckResult(Base):
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class Incident(Base):
+    """Инцидент: период недоступности (down) или замедления (slow) устройства."""
+
+    __tablename__ = "incidents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(
+        ForeignKey("devices.id", ondelete="CASCADE"), index=True
+    )
+    kind: Mapped[str] = mapped_column(String(8), default="down")  # down | slow
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # роль: admin (полный доступ) | viewer (только просмотр)
+    role: Mapped[str] = mapped_column(String(16), default="admin")
 
 
 class AppSettings(Base):

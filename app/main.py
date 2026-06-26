@@ -31,9 +31,14 @@ _MIGRATIONS = {
         ("latency_threshold", "INTEGER"),
         ("is_slow", "BOOLEAN NOT NULL DEFAULT 0"),
         ("slow_streak", "INTEGER NOT NULL DEFAULT 0"),
+        ("check_type", "VARCHAR(8) NOT NULL DEFAULT 'icmp'"),
+        ("port", "INTEGER"),
     ],
     "app_settings": [
         ("latency_threshold_ms", "INTEGER NOT NULL DEFAULT 0"),
+    ],
+    "users": [
+        ("role", "VARCHAR(16) NOT NULL DEFAULT 'admin'"),
     ],
 }
 

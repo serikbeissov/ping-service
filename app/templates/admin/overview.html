@@ -17,8 +17,11 @@
 </div>
 
 <div class="flex flex-wrap gap-3">
+  {% if user.role == 'admin' %}
   <a href="/admin/devices" class="rounded-md bg-ok px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-ok/90">+ Устройство</a>
   <a href="/admin/groups" class="rounded-md bg-card px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">+ Раздел</a>
+  {% endif %}
+  <a href="/admin/incidents" class="rounded-md bg-card px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">Инциденты и SLA</a>
   <a href="/" class="rounded-md bg-card px-4 py-2 text-sm font-medium text-slate-100 hover:bg-border">Открыть дашборд</a>
 </div>
 

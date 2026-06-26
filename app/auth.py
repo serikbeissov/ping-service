@@ -50,12 +50,30 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> User | None
     return db.get(User, uid)
 
 
-def require_admin(
+def require_user(
     request: Request, user: User | None = Depends(current_user)
 ) -> User:
+    """Любой авторизованный пользователь (admin или viewer)."""
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
             headers={"Location": "/login"},
+        )
+    return user
+
+
+def require_admin(
+    request: Request, user: User | None = Depends(current_user)
+) -> User:
+    """Только администратор. Viewer получает 403."""
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": "/login"},
+        )
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Требуются права администратора",
         )
     return user

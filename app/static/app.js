@@ -27,6 +27,11 @@
     if (d.is_up == null) return "нет данных";
     return d.is_slow ? "медленно" : "онлайн";
   }
+  function typeLabel(d) {
+    if (d.check_type === "tcp") return "TCP" + (d.port ? ":" + d.port : "");
+    if (d.check_type === "http") return "HTTP";
+    return "ICMP";
+  }
   const esc = (s) =>
     String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
@@ -158,6 +163,7 @@
           (d.enabled ? "" : ' <span class="text-xs text-slate-500">(выкл.)</span>') +
           "</td>" +
           '<td class="px-3 py-2 font-mono text-slate-300">' + esc(d.host) + "</td>" +
+          '<td class="px-3 py-2 text-xs text-slate-400">' + typeLabel(d) + "</td>" +
           '<td class="px-3 py-2 text-slate-300">' + esc(d.group || "—") + "</td>" +
           '<td class="px-3 py-2 text-right font-mono tabular-nums text-slate-200">' +
           fmtLatency(d.last_latency_ms) + "</td>" +
@@ -183,7 +189,7 @@
     if (!state.data) return;
     const list = sortDevices(flatten(state.data).filter(matchFilter));
     const head = [
-      "Название", "Host", "Раздел", "Статус", "Latency (ms)",
+      "Название", "Host", "Тип", "Раздел", "Статус", "Latency (ms)",
       "Порог (ms)", "Uptime 24ч (%)", "Последняя проверка",
     ];
     const rows = [head];
@@ -191,6 +197,7 @@
       rows.push([
         d.name,
         d.host,
+        typeLabel(d),
         d.group || "",
         statusTitle(d),
         d.last_latency_ms == null ? "" : Math.round(d.last_latency_ms),

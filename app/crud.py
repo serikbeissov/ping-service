@@ -4,7 +4,15 @@ from datetime import timedelta
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from .models import AppSettings, CheckResult, Device, Group, User, utcnow
+from .models import (
+    AppSettings,
+    CheckResult,
+    Device,
+    Group,
+    Incident,
+    User,
+    utcnow,
+)
 
 
 # ---- Settings ----
@@ -243,6 +251,81 @@ def bulk_create_devices(
     return len(entries)
 
 
+# ---- Инциденты / SLA ----
+
+def open_incident(db: Session, device_id: int, kind: str) -> Incident:
+    existing = (
+        db.query(Incident)
+        .filter(
+            Incident.device_id == device_id,
+            Incident.kind == kind,
+            Incident.ended_at.is_(None),
+        )
+        .first()
+    )
+    if existing:
+        return existing
+    inc = Incident(device_id=device_id, kind=kind)
+    db.add(inc)
+    return inc
+
+
+def close_incident(db: Session, device_id: int, kind: str, when) -> None:
+    opened = (
+        db.query(Incident)
+        .filter(
+            Incident.device_id == device_id,
+            Incident.kind == kind,
+            Incident.ended_at.is_(None),
+        )
+        .all()
+    )
+    for inc in opened:
+        inc.ended_at = when
+
+
+def list_incidents(
+    db: Session,
+    since=None,
+    device_id: int | None = None,
+    kind: str | None = None,
+    limit: int = 300,
+) -> list[Incident]:
+    q = db.query(Incident)
+    if since is not None:
+        # инцидент попадает в окно, если ещё открыт или закончился после начала окна
+        q = q.filter((Incident.ended_at.is_(None)) | (Incident.ended_at >= since))
+    if device_id is not None:
+        q = q.filter(Incident.device_id == device_id)
+    if kind is not None:
+        q = q.filter(Incident.kind == kind)
+    return q.order_by(Incident.started_at.desc()).limit(limit).all()
+
+
+def downtime_seconds(
+    db: Session, since, until=None, kind: str = "down"
+) -> dict[int, float]:
+    """Суммарная длительность инцидентов по устройствам внутри окна [since, until]."""
+    until = until or utcnow()
+    incidents = (
+        db.query(Incident)
+        .filter(
+            Incident.kind == kind,
+            Incident.started_at < until,
+            (Incident.ended_at.is_(None)) | (Incident.ended_at > since),
+        )
+        .all()
+    )
+    out: dict[int, float] = {}
+    for inc in incidents:
+        start = max(inc.started_at, since)
+        end = min(inc.ended_at or until, until)
+        seconds = (end - start).total_seconds()
+        if seconds > 0:
+            out[inc.device_id] = out.get(inc.device_id, 0.0) + seconds
+    return out
+
+
 def cleanup_history(db: Session, retention_days: int) -> int:
     cutoff = utcnow() - timedelta(days=retention_days)
     deleted = (
@@ -258,3 +341,32 @@ def cleanup_history(db: Session, retention_days: int) -> int:
 
 def get_user(db: Session, username: str) -> User | None:
     return db.query(User).filter(User.username == username).first()
+
+
+def list_users(db: Session) -> list[User]:
+    return db.query(User).order_by(User.username).all()
+
+
+def create_user(db: Session, username: str, password_hash: str, role: str) -> User:
+    user = User(username=username, password_hash=password_hash, role=role)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user(db: Session, user: User, **fields) -> User:
+    for key, value in fields.items():
+        setattr(user, key, value)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def delete_user(db: Session, user: User) -> None:
+    db.delete(user)
+    db.commit()
+
+
+def count_admins(db: Session) -> int:
+    return db.query(User).filter(User.role == "admin").count()

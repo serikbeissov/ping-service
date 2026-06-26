@@ -8,15 +8,25 @@
 {% block body %}
 <div class="flex min-h-dvh">
   <aside class="hidden w-60 shrink-0 border-r border-border bg-surface p-4 md:block">
-    <div class="mb-6 flex items-center gap-2 px-1">
+    <div class="mb-4 flex items-center gap-2 px-1">
       <svg class="h-6 w-6 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
       <span class="font-semibold">{{ app_title }}</span>
     </div>
+    <div class="mb-4 rounded-md bg-card px-3 py-2 text-xs">
+      <div class="truncate font-medium text-slate-200">{{ user.username }}</div>
+      <div class="text-slate-400">{{ 'Администратор' if user.role == 'admin' else 'Наблюдатель' }}</div>
+    </div>
     <nav class="space-y-1">
       {{ navlink('/admin', 'overview', 'Обзор') }}
+      {% if user.role == 'admin' %}
       {{ navlink('/admin/devices', 'devices', 'Устройства') }}
       {{ navlink('/admin/groups', 'groups', 'Разделы') }}
+      {% endif %}
+      {{ navlink('/admin/incidents', 'incidents', 'Инциденты и SLA') }}
+      {% if user.role == 'admin' %}
+      {{ navlink('/admin/users', 'users', 'Пользователи') }}
       {{ navlink('/admin/settings', 'settings', 'Настройки') }}
+      {% endif %}
     </nav>
     <div class="mt-6 space-y-1 border-t border-border pt-4">
       <a href="/" class="block rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-card">Дашборд</a>
@@ -27,10 +37,17 @@
   <div class="min-w-0 flex-1">
     <header class="flex items-center justify-between gap-3 border-b border-border bg-surface/80 px-4 py-3 backdrop-blur md:hidden">
       <span class="font-semibold">{{ app_title }}</span>
-      <nav class="flex gap-2 text-sm">
+      <nav class="flex flex-wrap gap-2 text-sm">
+        <a href="/admin" class="text-slate-300">Обзор</a>
+        {% if user.role == 'admin' %}
         <a href="/admin/devices" class="text-slate-300">Устройства</a>
         <a href="/admin/groups" class="text-slate-300">Разделы</a>
+        {% endif %}
+        <a href="/admin/incidents" class="text-slate-300">Инциденты</a>
+        {% if user.role == 'admin' %}
+        <a href="/admin/users" class="text-slate-300">Пользователи</a>
         <a href="/admin/settings" class="text-slate-300">Настройки</a>
+        {% endif %}
         <a href="/logout" class="text-slate-300">Выйти</a>
       </nav>
     </header>

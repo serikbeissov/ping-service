@@ -25,6 +25,8 @@ def device_status(
         "enabled": device.enabled,
         "is_up": device.is_up,
         "is_slow": bool(device.is_slow),
+        "check_type": device.check_type or "icmp",
+        "port": device.port,
         "last_latency_ms": device.last_latency_ms,
         "last_checked": _iso(device.last_checked),
         "last_change": _iso(device.last_change),

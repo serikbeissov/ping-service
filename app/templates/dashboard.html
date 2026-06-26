@@ -33,8 +33,9 @@
       <svg class="h-6 w-6 text-ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
       <h1 class="text-lg font-semibold">{{ app_title }}</h1>
     </div>
-    <div class="flex items-center gap-4 text-sm">
-      <span class="text-slate-400">обновлено <span id="updated">—</span></span>
+    <div class="flex items-center gap-3 text-sm">
+      <span class="hidden text-slate-400 sm:inline">обновлено <span id="updated">—</span></span>
+      <a href="/tv" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">ТВ-режим</a>
       {% if user %}
         <a href="/admin" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">Админка</a>
       {% else %}
@@ -137,6 +138,7 @@
           <th data-sort="status" class="cursor-pointer select-none px-3 py-2">●</th>
           <th data-sort="name" class="cursor-pointer select-none px-3 py-2">Название</th>
           <th data-sort="host" class="cursor-pointer select-none px-3 py-2">Host</th>
+          <th class="px-3 py-2">Тип</th>
           <th data-sort="group" class="cursor-pointer select-none px-3 py-2">Раздел</th>
           <th data-sort="latency" class="cursor-pointer select-none px-3 py-2 text-right">Latency</th>
           <th class="px-3 py-2">История</th>
