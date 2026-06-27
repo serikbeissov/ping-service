@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ app_title }} — NOC</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="/static/vendor/tailwind.js"></script>
+  <link href="/static/vendor/fonts.css" rel="stylesheet" />
   <script>
     tailwind.config = { theme: { extend: {
       fontFamily: { sans: ['"Fira Sans"','system-ui','sans-serif'] },
@@ -30,15 +30,18 @@
         <span class="text-bad"><span id="s-offline">0</span> офлайн</span>
       </div>
       <span id="clock" class="font-mono text-2xl font-bold tabular-nums">--:--:--</span>
+      <button id="alarm-toggle" class="rounded-md bg-card px-3 py-2 text-sm hover:bg-border">🔔 Тревога</button>
       <button id="fs" class="rounded-md bg-card px-3 py-2 text-sm text-slate-200 hover:bg-border">⛶ Во весь экран</button>
     </div>
   </header>
 
   <main id="noc" class="space-y-6 p-6"></main>
 
+  <script src="/static/alerts.js"></script>
   <script>
   (function () {
     const REFRESH_MS = 5000;
+    const alerts = window.createAlertCenter ? window.createAlertCenter({ baseTitle: document.title }) : null;
     const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
     function tileColor(d){
       if (d.is_up === false) return 'bg-bad text-slate-900';
@@ -73,10 +76,17 @@
         let html = d.groups.map(zoneBlock).join('');
         if ((d.ungrouped||[]).length) html += zoneBlock({name:'Без раздела', devices:d.ungrouped, online:d.ungrouped.filter(x=>x.is_up===true).length, offline:d.ungrouped.filter(x=>x.is_up===false).length, total:d.ungrouped.length});
         document.getElementById('noc').innerHTML = html || '<div class="py-20 text-center text-slate-500">Нет устройств</div>';
+        if (alerts) alerts.process([].concat(...d.groups.map(g=>g.devices), d.ungrouped||[]));
       } catch(e){}
     }
     function tick(){ const n=new Date(); const p=x=>String(x).padStart(2,'0'); document.getElementById('clock').textContent = p(n.getHours())+':'+p(n.getMinutes())+':'+p(n.getSeconds()); }
     document.getElementById('fs').addEventListener('click', ()=>{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen(); });
+    var alarmBtn = document.getElementById('alarm-toggle');
+    if (alarmBtn && alerts) {
+      var sync = function(){ var on = alerts.isEnabled(); alarmBtn.textContent = on ? '🔔 Тревога' : '🔕 Тревога'; alarmBtn.classList.toggle('text-ok', on); alarmBtn.classList.toggle('text-slate-500', !on); };
+      sync();
+      alarmBtn.addEventListener('click', function(){ alerts.setEnabled(!alerts.isEnabled()); sync(); });
+    }
     tick(); setInterval(tick, 1000);
     refresh(); setInterval(refresh, REFRESH_MS);
   })();

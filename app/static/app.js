@@ -12,6 +12,11 @@
     data: null,
   };
 
+  // визуальные алерты (работают офлайн, в браузере)
+  const alerts = window.createAlertCenter
+    ? window.createAlertCenter({ baseTitle: document.title })
+    : null;
+
   // ---------- форматирование ----------
   const fmtLatency = (v) =>
     v === null || v === undefined ? "—" : Math.round(v) + " ms";
@@ -350,8 +355,10 @@
       setText("sum-total", data.total);
       setText("sum-online", data.online);
       setText("sum-offline", data.offline);
-      flatten(data).forEach(applyCard);
+      const flat = flatten(data);
+      flat.forEach(applyCard);
       if (state.view === "table") renderTable();
+      if (alerts) alerts.process(flat);
       setText("updated", new Date(data.generated_at).toLocaleTimeString());
     } catch (e) {
       /* сеть недоступна — тихо пропускаем тик */
@@ -377,6 +384,20 @@
       });
     const csvBtn = document.getElementById("export-csv");
     if (csvBtn) csvBtn.addEventListener("click", exportCSV);
+    const alarmBtn = document.getElementById("alarm-toggle");
+    if (alarmBtn && alerts) {
+      const sync = () => {
+        const on = alerts.isEnabled();
+        alarmBtn.textContent = on ? "🔔 Тревога" : "🔕 Тревога";
+        alarmBtn.classList.toggle("text-ok", on);
+        alarmBtn.classList.toggle("text-slate-500", !on);
+      };
+      sync();
+      alarmBtn.addEventListener("click", () => {
+        alerts.setEnabled(!alerts.isEnabled());
+        sync();
+      });
+    }
     document.querySelectorAll("th[data-sort]").forEach((th) =>
       th.addEventListener("click", () => {
         const key = th.dataset.sort;

@@ -35,6 +35,8 @@
     </div>
     <div class="flex items-center gap-3 text-sm">
       <span class="hidden text-slate-400 sm:inline">обновлено <span id="updated">—</span></span>
+      <button id="alarm-toggle" type="button" title="Звуковых сигналов нет — только визуальные тревоги в браузере"
+              class="rounded-md bg-card px-3 py-1.5 font-medium hover:bg-border transition-colors">🔔 Тревога</button>
       <a href="/tv" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">ТВ-режим</a>
       {% if user %}
         <a href="/admin" class="rounded-md bg-card px-3 py-1.5 font-medium text-slate-100 hover:bg-border transition-colors">Админка</a>
@@ -176,6 +178,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/alerts.js"></script>
 <script src="/static/app.js"></script>
 {% endblock %}
